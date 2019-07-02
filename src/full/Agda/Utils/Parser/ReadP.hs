@@ -76,6 +76,7 @@ module Agda.Utils.Parser.ReadP
 
 import Control.Applicative (Applicative(..),Alternative(empty,(<|>)))
 import Control.Monad
+import Control.Monad.Fail
 import GHC.Exts
 import Data.Char
 
@@ -108,6 +109,7 @@ instance Monad (P t) where
   (Result x p) >>= k = k x `mplus` (p >>= k)
   (Final r)    >>= k = final [ys' | (x,s) <- r, ys' <- run (k x) s]
 
+instance MonadFail (P t) where
   fail _ = Fail
 
 instance Alternative (P t) where
@@ -159,8 +161,10 @@ instance Applicative (ReadP t) where
 
 instance Monad (ReadP t) where
   return    = pure
-  fail _    = R (\_ -> Fail)
   R m >>= f = R (\k -> m (\a -> let R m' = f a in m' k))
+
+instance MonadFail (ReadP t) where
+  fail _ = R (\_ -> Fail)
 
 instance Alternative (ReadP t) where
   empty = mzero
