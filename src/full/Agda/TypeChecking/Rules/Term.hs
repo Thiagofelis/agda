@@ -576,13 +576,7 @@ checkAbsurdLambda cmp i h e t = do
             [ ("Adding absurd function" <+> prettyTCM mod) <> prettyTCM aux
             , nest 2 $ "of type" <+> prettyTCM t'
             ]
-          addConstant aux $
-            (\ d -> (defaultDefn (setModality mod info') aux t' d)
-                    { defPolarity       = [Nonvariant]
-                    , defArgOccurrences = [Unused] })
-            $ emptyFunction
-              { funClauses        =
-                  [ Clause
+          let cl = Clause
                     { clauseLHSRange  = getRange e
                     , clauseFullRange = getRange e
                     , clauseTel       = telFromList [fmap (absurdPatternName,) dom]
@@ -592,9 +586,15 @@ checkAbsurdLambda cmp i h e t = do
                     , clauseCatchall  = False
                     , clauseUnreachable = Just True -- absurd clauses are unreachable
                     }
-                  ]
+          addConstant aux $
+            (\ d -> (defaultDefn (setModality mod info') aux t' d)
+                    { defPolarity       = [Nonvariant]
+                    , defArgOccurrences = [Unused] })
+            $ emptyFunction
+              { funClauses        = [cl]
               , funCompiled       = Just Fail
               , funSplitTree      = Just $ SplittingDone 0
+              , funCovering       = [cl]
               , funMutual         = Just []
               , funTerminates     = Just True
               }

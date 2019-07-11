@@ -879,12 +879,15 @@ bindBuiltinNoDef b q = inTopContext $ do
         -- Andreas, 2015-02-14
         -- Special treatment of SizeUniv, should maybe be a primitive.
         def | b == builtinSizeUniv = emptyFunction
-                { funClauses = [ (empty :: Clause) { clauseBody = Just $ Sort sSizeUniv } ]
+                { funClauses = [cl]
                 , funCompiled = Just (CC.Done [] $ Sort sSizeUniv)
+                , funCovering = [cl]
                 , funMutual    = Just []
                 , funTerminates = Just True
                 }
             | otherwise = Axiom
+
+        cl = (empty :: Clause) { clauseBody = Just $ Sort sSizeUniv }
     Just (BuiltinPrim name axioms) -> do
       PrimImpl t pf <- lookupPrimitiveFunction name
       bindPrimitive name $ pf { primFunName = q }

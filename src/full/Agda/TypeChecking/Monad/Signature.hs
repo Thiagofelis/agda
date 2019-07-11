@@ -487,6 +487,7 @@ applySection' new ptel old ts ScopeCopyInfo{ renNames = rd, renModules = rm } = 
                         { funClauses        = [cl]
                         , funCompiled       = Just cc
                         , funSplitTree      = mst
+                        , funCovering       = [cl]
                         , funMutual         = mutual
                         , funProjection     = proj
                         , funTerminates     = Just True

@@ -163,21 +163,24 @@ checkAlias t ai delayed i name e mc = atClause name 0 (A.RHS e mc) $ do
         _          -> id
 
   -- Add the definition
+  let cl = Clause  -- trivial clause @name = v@
+             { clauseLHSRange  = getRange i
+             , clauseFullRange = getRange i
+             , clauseTel       = EmptyTel
+             , namedClausePats = []
+             , clauseBody      = Just $ bodyMod v
+             , clauseType      = Just $ Arg ai t
+             , clauseCatchall  = False
+             , clauseUnreachable = Just False
+             }
+
   addConstant name $ defaultDefn ai name t
                    $ set funMacro (Info.defMacro i == MacroDef) $
                      emptyFunction
-                      { funClauses = [ Clause  -- trivial clause @name = v@
-                          { clauseLHSRange  = getRange i
-                          , clauseFullRange = getRange i
-                          , clauseTel       = EmptyTel
-                          , namedClausePats = []
-                          , clauseBody      = Just $ bodyMod v
-                          , clauseType      = Just $ Arg ai t
-                          , clauseCatchall  = False
-                          , clauseUnreachable = Just False
-                          } ]
+                      { funClauses = [cl]
                       , funCompiled = Just $ Done [] $ bodyMod v
                       , funSplitTree = Just $ SplittingDone 0
+                      , funCovering = [cl]
                       , funDelayed  = delayed
                       , funAbstr    = Info.defAbstract i
                       }

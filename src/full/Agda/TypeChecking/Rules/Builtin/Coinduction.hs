@@ -155,6 +155,7 @@ bindBuiltinFlat x =
                , theDef = emptyFunction
                    { funClauses      = [clause]
                    , funCompiled     = Just $ cc
+                   , funCovering     = [clause]
                    , funProjection   = Just projection
                    , funMutual       = Just []
                    , funTerminates   = Just True

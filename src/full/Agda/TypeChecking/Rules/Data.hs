@@ -582,6 +582,7 @@ defineProjections dataname con params names fsT t = do
                 { funClauses = cs
                 , funTerminates = Just True
                 , funCompiled = Just cc
+                , funCovering = cs
                 , funSplitTree = mst
                 , funMutual = Just []
                 }
