@@ -121,7 +121,8 @@ projView v = do
       if projIndex isP <= 0 then fallback else do
         case es of
           []           -> return $ LoneProjectionLike f $ projArgInfo isP
-          Apply a : es -> return $ ProjectionView f a es
+          Apply a : es -> do
+            return $ ProjectionView f a es
           -- Since a projection is a function, it cannot be projected itself.
           Proj{}  : _  -> __IMPOSSIBLE__
           -- The principal argument of a projection-like cannot be the interval?
@@ -143,6 +144,9 @@ reduceProjectionLike v = do
                             -- ordinary reduce, only different for Def's
     _                -> return v
 
+data ProjEliminator = EvenLone | ButLone | NoPostfix
+  deriving Eq
+
 -- | Turn prefix projection-like function application into postfix ones.
 --   This does just one layer, such that the top spine contains
 --   the projection-like functions as projections.
@@ -158,20 +162,23 @@ reduceProjectionLike v = do
 --   on (applications of) projection-like functions.
 elimView
   :: (MonadReduce m, MonadTCEnv m, HasConstInfo m)
-  => Bool -> Term -> m Term
-elimView loneProjToLambda v = do
+  => ProjEliminator -> Term -> m Term
+elimView pe v = do
   reportSDoc "tc.conv.elim" 30 $ "elimView of " <+> prettyTCM v
   reportSLn  "tc.conv.elim" 50 $ "v = " ++ show v
   v <- reduceProjectionLike v
   reportSDoc "tc.conv.elim" 40 $
     "elimView (projections reduced) of " <+> prettyTCM v
-  pv <- projView v
-  case pv of
-    NoProjection{}        -> return v
-    LoneProjectionLike f ai
-      | loneProjToLambda  -> return $ Lam ai $ Abs "r" $ Var 0 [Proj ProjPrefix f]
-      | otherwise         -> return v
-    ProjectionView f a es -> (`applyE` (Proj ProjPrefix f : es)) <$> elimView loneProjToLambda (unArg a)
+  case pe of
+    NoPostfix -> return v
+    _         -> do
+      pv <- projView v
+      case pv of
+        NoProjection{}        -> return v
+        LoneProjectionLike f ai
+          | pe==EvenLone  -> return $ Lam ai $ Abs "r" $ Var 0 [Proj ProjPrefix f]
+          | otherwise     -> return v
+        ProjectionView f a es -> (`applyE` (Proj ProjPrefix f : es)) <$> elimView pe (unArg a)
 
 -- | Which @Def@types are eligible for the principle argument
 --   of a projection-like function?

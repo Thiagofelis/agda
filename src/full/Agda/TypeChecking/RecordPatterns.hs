@@ -4,7 +4,9 @@
 -- uses of projection functions.
 
 module Agda.TypeChecking.RecordPatterns
-  ( translateRecordPatterns
+  ( RecordPatternToEliminate(..)
+  , translateRecordPatterns
+  , translateRecordPatterns'
   , translateCompiledClauses
   , translateSplitTree
   , recordPatternToProjections
@@ -14,6 +16,8 @@ import Control.Arrow (first, second)
 import Control.Monad.Fix
 import Control.Monad.Reader
 import Control.Monad.State
+
+import Debug.Trace
 
 import qualified Data.List as List
 import Data.Maybe
@@ -45,6 +49,11 @@ import qualified Agda.Utils.Pretty as P
 import Agda.Utils.Size
 
 import Agda.Utils.Impossible
+
+-- | Indicate if all suppressible record patterns must be suppressed or only the implicit ones.
+
+data RecordPatternToEliminate = AllRecordPatterns | OnlyImplicit
+  deriving (Eq, Show)
 
 ---------------------------------------------------------------------------
 -- * Record pattern translation for let bindings
@@ -438,7 +447,10 @@ isRecordSplit _ = return Nothing
 -- literal patterns.
 
 translateRecordPatterns :: Clause -> TCM Clause
-translateRecordPatterns clause = do
+translateRecordPatterns = translateRecordPatterns' OnlyImplicit
+
+translateRecordPatterns' :: RecordPatternToEliminate -> Clause -> TCM Clause
+translateRecordPatterns' recElim clause = do
   -- ps: New patterns, in left-to-right order, in the context of the
   -- old RHS.
 
@@ -449,7 +461,7 @@ translateRecordPatterns clause = do
   -- cs: List of changes, with types in the context of the old
   -- telescope.
 
-  (ps, s, cs) <- runRecPatM $ translatePatterns $ unnumberPatVars $ namedClausePats clause
+  (ps, s, cs) <- runRecPatM $ (translatePatterns' recElim) $ unnumberPatVars $ namedClausePats clause
 
   let -- Number of variables + dot patterns in new clause.
       noNewPatternVars = size cs
@@ -463,7 +475,7 @@ translateRecordPatterns clause = do
 
       -- Substitution used to convert terms in the old telescope's
       -- context to terms in the new RHS's context.
-      perm = fromMaybe __IMPOSSIBLE__ $ clausePerm clause
+      perm = fromMaybe __IMPOSSIBLE__ $ (dbPatPerm' False . namedClausePats) clause
       rhsSubst' = mkSub $ permute (reverseP perm) s'
       -- TODO: Is it OK to replace the definition above with the
       -- following one?
@@ -473,11 +485,12 @@ translateRecordPatterns clause = do
       -- The old telescope, flattened and in textual left-to-right
       -- order (i.e. the type signature for the variable which occurs
       -- first in the list of patterns comes first).
-      flattenedOldTel =
-        permute (invertP __IMPOSSIBLE__ $ compactP perm) $
-        zip (teleNames $ clauseTel clause) $
+      preOldTel = zip (teleNames $ clauseTel clause) $
         flattenTel $
         clauseTel clause
+      flattenedOldTel =
+        permute (invertP __IMPOSSIBLE__ $ compactP perm) $
+        preOldTel
 
       -- The new telescope, still flattened, with types in the context
       -- of the new RHS, in textual left-to-right order, and with
@@ -523,6 +536,7 @@ translateRecordPatterns clause = do
             { clauseTel       = newTel
             , namedClausePats = numberPatVars __IMPOSSIBLE__ newPerm $ applySubst lhsSubst ps
             , clauseBody      = applySubst lhsSubst $ clauseBody clause
+            , clauseType      = applySubst lhsSubst $ clauseType clause
             }
 
   reportSDoc "tc.lhs.recpat" 20 $ vcat
@@ -530,12 +544,15 @@ translateRecordPatterns clause = do
       , nest 2 $ inTopContext $ vcat
         [ "delta =" <+> prettyTCM (clauseTel clause)
         , "pats  =" <+> text (show $ clausePats clause)
+        , "body =" <+> maybe (text "") prettyTCM (clauseBody clause)
         ]
       , "Intermediate results:"
       , nest 2 $ vcat
         [ "ps        =" <+> text (show ps)
         , "s         =" <+> prettyTCM s
+        , "dummy cs  =" <+> (text . show) cs
         , "cs        =" <+> prettyTCM cs
+        , "preOldTel =" <+> prettyTCM preOldTel
         , "flattenedOldTel =" <+> (text . show) flattenedOldTel
         , "newTel'   =" <+> (text . show) newTel'
         , "newPerm   =" <+> prettyTCM newPerm
@@ -696,29 +713,43 @@ removeTree tree = do
 -- This function assumes that literals are never of record type.
 
 translatePattern :: Pattern -> RecPatM (Pattern, [Term], Changes)
-translatePattern p@(ConP c ci ps)
+translatePattern = translatePattern' OnlyImplicit
+
+translatePattern' :: RecordPatternToEliminate -> Pattern -> RecPatM (Pattern, [Term], Changes)
+translatePattern' recElim p@(ConP c ci ps)
   -- Andreas, 2015-05-28 only translate implicit record patterns
-  | Just PatOSystem <- conPRecord ci = do
-      r <- recordTree p
-      case r of
-        Left  r -> r
-        Right t -> removeTree t
+  | Just patOrig <- conPRecord ci =
+      if patOrig == PatOSystem || recElim == AllRecordPatterns
+      then do
+        liftTCM $ reportSDoc "tc.rec" 10 $ "We are eliminating" <+> prettyTCM p
+        liftTCM $ reportSDoc "tc.rec" 10 $ "  of type" <+> prettyTCM (fromMaybe __IMPOSSIBLE__ (conPType ci))
+        r <- recordTree' recElim p
+        case r of
+          Left r -> r
+          Right t -> removeTree t
+      else do
+        (ps, s, cs) <- translatePatterns' recElim ps
+        return (ConP c ci ps, s, cs)
   | otherwise = do
-      (ps, s, cs) <- translatePatterns ps
+      (ps, s, cs) <- translatePatterns' recElim ps
       return (ConP c ci ps, s, cs)
-translatePattern p@(DefP o q ps) = do
-      (ps, s, cs) <- translatePatterns ps
+translatePattern' recElim p@(DefP o q ps) = do
+      (ps, s, cs) <- translatePatterns' recElim ps
       return (DefP o q ps, s, cs)
-translatePattern p@VarP{} = removeTree (Leaf p)
-translatePattern p@DotP{} = removeTree (Leaf p)
-translatePattern p@LitP{} = return (p, [], [])
-translatePattern p@ProjP{}= return (p, [], [])
-translatePattern p@IApplyP{}= return (p, [], [])
+translatePattern' _ p@VarP{} = removeTree (Leaf p)
+translatePattern' _ p@DotP{} = removeTree (Leaf p)
+translatePattern' _ p@LitP{} = return (p, [], [])
+translatePattern' _ p@ProjP{}= return (p, [], [])
+translatePattern' _ p@IApplyP{}= return (p, [], [])
 
 translatePatterns :: [NamedArg Pattern] -> RecPatM ([NamedArg Pattern], [Term], Changes)
-translatePatterns ps = do
-  (ps', ss, cs) <- unzip3 <$> mapM (translatePattern . namedArg) ps
+translatePatterns = translatePatterns' OnlyImplicit
+
+translatePatterns' :: RecordPatternToEliminate -> [NamedArg Pattern] -> RecPatM ([NamedArg Pattern], [Term], Changes)
+translatePatterns' recElim ps = do
+  (ps', ss, cs) <- unzip3 <$> mapM ((translatePattern' recElim) . namedArg) ps
   return (zipWith (\p -> fmap (p <$)) ps' ps, concat ss, concat cs)
+
 
 -- | Traverses a pattern and returns one of two things:
 --
@@ -737,35 +768,44 @@ translatePatterns ps = do
 recordTree ::
   Pattern ->
   RecPatM (Either (RecPatM (Pattern, [Term], Changes)) RecordTree)
--- Andreas, 2015-05-28 only translate implicit record patterns
-recordTree p@(ConP c ci ps) | Just PatOSystem <- conPRecord ci = do
-  let t = fromMaybe __IMPOSSIBLE__ $ conPType ci
-  rs <- mapM (recordTree . namedArg) ps
-  case allRight rs of
-    Nothing ->
-      return $ Left $ do
-        (ps', ss, cs) <- unzip3 <$> mapM (either id removeTree) rs
-        return (ConP c ci (ps' `withNamedArgsFrom` ps),
-                concat ss, concat cs)
-    Just ts -> liftTCM $ do
-      t <- reduce t
-      reportSDoc "tc.rec" 45 $ vcat
-        [ "recordTree: "
-        , nest 2 $ "constructor pattern " <+> prettyTCM p <+> " has type " <+> prettyTCM t
-        ]
-      -- Andreas, 2018-03-03, see #2989:
-      -- The content of an @Arg@ might not be reduced (if @Arg@ is @Irrelevant@).
-      fields <- getRecordTypeFields =<< reduce (unArg t)
---      let proj p = \x -> Def (unArg p) [defaultArg x]
-      let proj p = (`applyE` [Proj ProjSystem $ unArg p])
-      return $ Right $ RecCon t $ zip (map proj fields) ts
-recordTree p@(ConP _ ci _) = return $ Left $ translatePattern p
-recordTree p@DefP{} = return $ Left $ translatePattern p
-recordTree p@VarP{} = return (Right (Leaf p))
-recordTree p@DotP{} = return (Right (Leaf p))
-recordTree p@LitP{} = return $ Left $ translatePattern p
-recordTree p@ProjP{}= return $ Left $ translatePattern p
-recordTree p@IApplyP{}= return $ Left $ translatePattern p
+recordTree = recordTree' OnlyImplicit
+
+recordTree' ::
+  RecordPatternToEliminate -> Pattern ->
+  RecPatM (Either (RecPatM (Pattern, [Term], Changes)) RecordTree)
+recordTree' recElim p@(ConP c ci ps)
+  | Just patOrig <- conPRecord ci  =
+      if patOrig == PatOSystem || recElim == AllRecordPatterns
+      then do
+        liftTCM $ reportSDoc "recPat" 10 $ "The pattern is" <+> prettyTCM p
+        let t = fromMaybe __IMPOSSIBLE__ $ conPType ci
+        rs <- mapM ((recordTree' recElim) . namedArg) ps
+        case allRight rs of
+          Nothing ->
+            return $ Left $ do
+              (ps', ss, cs) <- unzip3 <$> mapM (either id removeTree) rs
+              return (ConP c ci (ps' `withNamedArgsFrom` ps),
+                        concat ss, concat cs)
+          Just ts -> liftTCM $ do
+            t <- reduce t
+            reportSDoc "tc.rec" 45 $ vcat
+              [ "recordTree: "
+              , nest 2 $ "constructor pattern " <+> prettyTCM p <+> " has type " <+> prettyTCM t
+              ]
+            -- Andreas, 2018-03-03, see #2989:
+            -- The content of an @Arg@ might not be reduced (if @Arg@ is @Irrelevant@).
+            fields <- getRecordTypeFields =<< reduce (unArg t)
+            --      let proj p = \x -> Def (unArg p) [defaultArg x]
+            let proj p = (`applyE` [Proj ProjSystem $ unArg p])
+            return $ Right $ RecCon t $ zip (map proj fields) ts
+      else return $ Left $ translatePattern' recElim p
+recordTree' recElim  p@(ConP _ ci _) = return $ Left $ translatePattern' recElim p
+recordTree' recElim p@DefP{} = return $ Left $ translatePattern' recElim p
+recordTree' recElim p@VarP{} = return (Right (Leaf p))
+recordTree' recElim p@DotP{} = return (Right (Leaf p))
+recordTree' recElim p@LitP{} = return $ Left $ translatePattern' recElim p
+recordTree' recElim p@ProjP{}= return $ Left $ translatePattern' recElim p
+recordTree' recElim p@IApplyP{}= return $ Left $ translatePattern' recElim p
 
 ------------------------------------------------------------------------
 -- Translation of the clause telescope and body

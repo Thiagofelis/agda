@@ -1543,7 +1543,7 @@ data Definition = Defn
     -- ^ @Just q@ when this definition is an instance of class q
   , defCopy           :: Bool
     -- ^ Has this function been created by a module
-                         -- instantiation?
+    -- instantiation?
   , defMatchable      :: Set QName
     -- ^ The set of symbols with rewrite rules that match against this symbol
   , defNoCompilation  :: Bool

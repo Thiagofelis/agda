@@ -39,8 +39,4 @@ deepEtaExpand = checkInternal' etaExpandAction
 etaExpandAction
   :: (MonadReduce m, MonadTCEnv m, HasOptions m, HasConstInfo m, MonadDebug m)
   => Action m
-etaExpandAction = Action
-  { preAction       = etaExpandOnce
-  , postAction      = \ _ -> return
-  , relevanceAction = \ _ -> id
-  }
+etaExpandAction = defaultAction { preAction = etaExpandOnce  }

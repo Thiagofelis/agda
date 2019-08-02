@@ -102,7 +102,7 @@ import Agda.Utils.Impossible
 
 -- | Prepare parts of a parameter telescope for abstraction in constructors
 --   and projections.
-hideAndRelParams :: Dom a -> Dom a
+hideAndRelParams :: (LensHiding a, LensRelevance a) => a -> a
 hideAndRelParams = hideOrKeepInstance . mapRelevance nonStrictToIrr
 
 -- * Operations on 'Context'.

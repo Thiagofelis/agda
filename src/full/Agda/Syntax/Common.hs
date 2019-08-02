@@ -1191,7 +1191,7 @@ setFreeVariablesArgInfo = mapArgInfo . setFreeVariables
 mapFreeVariablesArgInfo :: LensArgInfo a => LensMap FreeVariables a
 mapFreeVariablesArgInfo = mapArgInfo . mapFreeVariables
 
-
+                          --
 ---------------------------------------------------------------------------
 -- * Arguments
 ---------------------------------------------------------------------------

@@ -32,6 +32,7 @@ import Agda.TypeChecking.Positivity.Occurrence
 import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Polarity
 import Agda.TypeChecking.Irrelevance
+import Agda.TypeChecking.Records
 import Agda.TypeChecking.CompiledClause (hasProjectionPatterns)
 import Agda.TypeChecking.CompiledClause.Compile
 
@@ -144,7 +145,7 @@ checkRecDef i name uc ind eta con (A.DataDefParams gpars ps) contel fields =
         Just c  -> return (True, c, i)
         Nothing -> do
           m <- killRange <$> currentModule
-          c <- qualify m <$> freshName_ ("recCon-NOT-PRINTED" :: String)
+          c <- qualify (recordModule name) <$> freshName_ ("recCon-NOT-PRINTED" :: String)
           return (False, c, i)
 
       -- Add record type to signature.
@@ -315,7 +316,7 @@ checkRecDef i name uc ind eta con (A.DataDefParams gpars ps) contel fields =
           -- See test/Succeed/ProjectionsTakeModuleTelAsParameters.agda.
           tel' <- getContextTelescope
           setModuleCheckpoint m
-          checkRecordProjections m name hasNamedCon con tel' (raise 1 ftel) fields
+          checkRecordProjections m name hasNamedCon con tel' ftel fields
 
 
       -- we define composition here so that the projections are already in the signature.
@@ -503,7 +504,7 @@ checkRecordProjections ::
   ModuleName -> QName -> Bool -> ConHead -> Telescope -> Telescope ->
   [A.Declaration] -> TCM ()
 checkRecordProjections m r hasNamedCon con tel ftel fs = do
-    checkProjs EmptyTel ftel fs
+    checkProjs EmptyTel (raise 1 ftel) fs
   where
 
     checkProjs :: Telescope -> Telescope -> [A.Declaration] -> TCM ()
@@ -526,7 +527,7 @@ checkRecordProjections m r hasNamedCon con tel ftel fs = do
           [ "top   =" <+> (inTopContext . prettyTCM =<< getContextTelescope)
           , "tel   =" <+> (inTopContext . prettyTCM $ tel)
           , "ftel1 =" <+> prettyTCM ftel1
-          , "t     =" <+> prettyTCM t
+          , "t     =" <+> addContext ftel1 (prettyTCM t)
           , "ftel2 =" <+> addContext ftel1 (underAbstraction_ ftel2 prettyTCM)
           , "abstr =" <+> (text . show) (Info.defAbstract info)
           , "quant =" <+> (text . show) (getQuantity ai)
@@ -614,7 +615,8 @@ checkRecordProjections m r hasNamedCon con tel ftel fs = do
                             , clauseTel       = killRange cltel
                             , namedClausePats = [Named Nothing <$> numberPatVars __IMPOSSIBLE__ (idP $ size ftel) conp]
                             , clauseBody      = body
-                            , clauseType      = Just $ Arg ai t
+                            , clauseType      = Just $ argFromDom $ flattenTel ftel !! size ftel1
+                              --Just $ Arg ai {-$ applySubst (singletonS (size ftel)  __DUMMY_TERM__)-} $ raise (1 + size ftel2) t
                             , clauseCatchall  = False
                             , clauseUnreachable = Just False
                             }

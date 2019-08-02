@@ -42,7 +42,7 @@ flattenTel (ExtendTel a tel) = raise (size tel + 1) a : flattenTel (absBody tel)
 
 {-# SPECIALIZE flattenTel :: Telescope -> [Dom Type] #-}
 
--- | Order a flattened telescope in the correct dependeny order: Γ ->
+-- | Order a flattened telescope in the correct dependency order: Γ ->
 --   Permutation (Γ -> Γ~)
 --
 --   Since @reorderTel tel@ uses free variable analysis of type in @tel@,

@@ -130,7 +130,8 @@ dbPatPerm = dbPatPerm' True
 --   The first argument controls whether dot patterns counts as variables or
 --   not.
 dbPatPerm' :: Bool -> [NamedArg DeBruijnPattern] -> Maybe Permutation
-dbPatPerm' countDots ps = Perm (size ixs) <$> picks
+dbPatPerm' countDots ps =
+  Perm (size ixs) <$> picks
   where
     ixs   = concatMap (getIndices . namedThing . unArg) ps
     n     = size $ catMaybes ixs

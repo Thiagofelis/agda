@@ -32,7 +32,7 @@ type MonadCheckInternal m =
 
 data Action (m :: Hs.Type -> Hs.Type)
 
-defaultAction :: Monad m => Action m
+defaultAction :: (MonadReduce m, MonadTCEnv m, HasConstInfo m) => Action m
 eraseUnusedAction :: Action TCM
 
 checkType :: (MonadCheckInternal m) => Type -> m ()
