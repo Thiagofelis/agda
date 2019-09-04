@@ -475,7 +475,7 @@ translateRecordPatterns' recElim clause = do
 
       -- Substitution used to convert terms in the old telescope's
       -- context to terms in the new RHS's context.
-      perm = fromMaybe __IMPOSSIBLE__ $ (dbPatPerm' False . namedClausePats) clause
+      perm = fromMaybe __IMPOSSIBLE__ $ (dbPatPerm' True . namedClausePats) clause
       rhsSubst' = mkSub $ permute (reverseP perm) s'
       -- TODO: Is it OK to replace the definition above with the
       -- following one?
@@ -495,15 +495,16 @@ translateRecordPatterns' recElim clause = do
       -- The new telescope, still flattened, with types in the context
       -- of the new RHS, in textual left-to-right order, and with
       -- Nothing in place of dot patterns.
-      substTel = map . fmap . second . applySubst
+  let substTel = map . fmap . second . applySubst
       newTel' =
         substTel rhsSubst' $
         translateTel cs $
         flattenedOldTel
 
+  reportSDoc "tc.lhs.recpat" 10 $ "newTel' is" <+> (text . show) newTel'
       -- Permutation taking the new variable and dot patterns to the
       -- new telescope.
-      newPerm = adjustForDotPatterns $
+  let newPerm = adjustForDotPatterns $
                   reorderTel_ $ map (maybe __DUMMY_DOM__ snd) newTel'
         -- It is important that __DUMMY_DOM__ does not mention any variable
         -- (see the definition of reorderTel).
@@ -553,7 +554,7 @@ translateRecordPatterns' recElim clause = do
         , "dummy cs  =" <+> (text . show) cs
         , "cs        =" <+> prettyTCM cs
         , "preOldTel =" <+> prettyTCM preOldTel
-        , "flattenedOldTel =" <+> (text . show) flattenedOldTel
+        , "flattenedOldTel =" <+> prettyTCM flattenedOldTel
         , "newTel'   =" <+> (text . show) newTel'
         , "newPerm   =" <+> prettyTCM newPerm
         ]

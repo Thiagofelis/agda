@@ -56,13 +56,12 @@ reconstructParameters' act a v = do
   reportSDoc "tc.with.reconstruct" 30 $
     sep [ "reconstructing parameters in"
         , nest 2 $ sep [ prettyTCM v <+> ":", nest 2 $ prettyTCM a ] ]
-  v <- checkInternal' justReconstructAction v a
+  v <- checkInternal' reconstructAction v a
   reportSDoc "tc.with.reconstruct" 30 $
     nest 2 $ "-->" <+> prettyTCM v
   return v
   where
-    justReconstructAction = defaultAction{ postAction = reconstruct }
-    onReconstructedParameters = act{ postAction = \ty te -> (reconstruct ty) =<< (postAction act) ty te}
+    reconstructAction = defaultAction{ postAction = reconstruct }
 
     reconstruct a v = do
       reportSDoc "tc.with.reconstruct" 30 $
@@ -85,7 +84,8 @@ reconstructParameters' act a v = do
               reportSDoc "tc.with.reconstruct" 50 $ "The hiddenPs are" <+> pretty hiddenPs
               tyCon <- defType <$> getConstInfo (conName h)
               reportSDoc "tc.reconstruct" 30 $ "Here we start infering spine"
-              ((_,conWithPars),_) <- inferSpine' onReconstructedParameters tyCon (Con h ci []) (Con h ci []) hiddenPs
+              ((_,Con h ci psAfterAct),_) <- inferSpine' act tyCon (Con h ci []) (Con h ci []) hiddenPs
+              ((_,conWithPars),_) <- inferSpine' reconstructAction tyCon (Con h ci []) (Con h ci []) psAfterAct
               reportSDoc "tc.reconstruct" 30 $ "The spine has been inferred:" <+> pretty conWithPars
               return $ applyWithoutReversing conWithPars vs
             _ -> __IMPOSSIBLE__
@@ -140,8 +140,9 @@ reconstructParameters' act a v = do
                                allApplyElims pars
           reportSDoc "tc.reconstruct" 20 $ "The params are" <+> pretty hiddenPs
           tyProj <- defType <$> getConstInfo p
-          let reconstructWithoutPostFixing = onReconstructedParameters { elimViewAction = elimView NoPostfix }
-          ((_,projWithPars),_) <- inferSpine' reconstructWithoutPostFixing tyProj (Def p []) (Def p []) hiddenPs
+          let reconstructWithoutPostFixing = reconstructAction { elimViewAction = elimView NoPostfix }
+          ((_,Def p psAfterAct),_) <- inferSpine' act tyProj (Def p []) (Def p []) hiddenPs
+          ((_,projWithPars),_) <- inferSpine' reconstructWithoutPostFixing tyProj (Def p []) (Def p []) psAfterAct
           reportSDoc "tc.reconstruct" 20 $ "Spine infered" <+> pretty projWithPars
           let fTe' x = applyWithoutReversing projWithPars ((Apply $ defaultArg $ fTe []):x)
           loop' tt fTe' (fTy . (Proj o p:)) es

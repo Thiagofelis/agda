@@ -1461,7 +1461,7 @@ data NLPat
 type PElims = [Elim' NLPat]
 
 data NLPType = NLPType
-  { nlpTypeLevel :: NLPat  -- always PTerm or PVar (with all bound variables in scope)
+  { nlpTypeLevel ::   -- always PTerm or PVar (with all bound variables in scope)
   , nlpTypeUnEl  :: NLPat
   } deriving (Data, Show)
 
