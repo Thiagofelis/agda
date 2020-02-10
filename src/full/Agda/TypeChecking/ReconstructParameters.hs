@@ -89,7 +89,9 @@ reconstructParameters' act a v = do
               reportSDoc "tc.reconstruct" 30 $ "The spine has been inferred:" <+> pretty conWithPars
               return $ applyWithoutReversing conWithPars vs
             _ -> __IMPOSSIBLE__
-        _        -> unSpineAndReconstruct a v
+        _  -> do
+          vv <- elimView EvenLone v
+          unSpineAndReconstruct a vv
     unSpineAndReconstruct :: Type -> Term -> TCM Term
     unSpineAndReconstruct a v = do
       case v of
@@ -135,17 +137,16 @@ reconstructParameters' act a v = do
       case unEl ty' of
         Def r pars -> do
           ~(Just (El _ (Pi _ b))) <- getDefType p ty'
-          let tt = absApp b (fTy [])
-          let hiddenPs = map (Apply . hideAndRelParams) $ fromMaybe __IMPOSSIBLE__ $
-                               allApplyElims pars
-          reportSDoc "tc.reconstruct" 20 $ "The params are" <+> pretty hiddenPs
           tyProj <- defType <$> getConstInfo p
           let reconstructWithoutPostFixing = reconstructAction { elimViewAction = elimView NoPostfix }
+          let hiddenPs = map Apply $ mapHide tyProj $ fromMaybe __IMPOSSIBLE__ $
+                               allApplyElims pars
+          reportSDoc "tc.reconstruct" 20 $ "The params are" <+> pretty hiddenPs
           ((_,Def p psAfterAct),_) <- inferSpine' act tyProj (Def p []) (Def p []) hiddenPs
           ((_,projWithPars),_) <- inferSpine' reconstructWithoutPostFixing tyProj (Def p []) (Def p []) psAfterAct
           reportSDoc "tc.reconstruct" 20 $ "Spine infered" <+> pretty projWithPars
           let fTe' x = applyWithoutReversing projWithPars ((Apply $ defaultArg $ fTe []):x)
-          loop' tt fTe' (fTy . (Proj o p:)) es
+          loop' (absApp b (fTy [])) fTe' (fTy . (Proj o p:)) es
         _ -> __IMPOSSIBLE__
     loop' ty _   _   (IApply {}:vs) = __IMPOSSIBLE__
 
@@ -157,6 +158,11 @@ reconstructParameters' act a v = do
     applyWithoutReversing (Dummy s es) ess = Dummy s (es++ess)
     applyWithoutReversing _            _   = error "No elims expected"
 
+    mapHide (El _ (Pi a b)) (p:tl) =
+      case argInfoHiding (domInfo a) of
+        Hidden -> (hideAndRelParams p):(mapHide (unAbs b) tl)
+        _      -> p:(mapHide (unAbs b) tl)
+    mapHide t l = l
 
 dropParameters :: TermLike a => a -> TCM a
 dropParameters = traverseTermM dropPars
