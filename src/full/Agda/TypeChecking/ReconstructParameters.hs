@@ -93,7 +93,7 @@ reconstructParameters' act a v = do
           vv <- elimView EvenLone v
           unSpineAndReconstruct a vv
     unSpineAndReconstruct :: Type -> Term -> TCM Term
-    unSpineAndReconstruct a v = do
+    unSpineAndReconstruct a v =
       case v of
         Var i vs -> do
           ty <- typeOfBV i
