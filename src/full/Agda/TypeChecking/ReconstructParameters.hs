@@ -22,6 +22,7 @@ import Agda.TypeChecking.Reduce
 import Agda.TypeChecking.Telescope
 import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Records
+import Agda.TypeChecking.Datatypes
 
 import Agda.Utils.Size
 
@@ -69,6 +70,7 @@ reconstructParameters' act a v = do
         , nest 2 $ sep [ prettyTCM v <+> ":", nest 2 $ prettyTCM a ] ]
       case unSpine v of
         Con h ci vs -> do
+          Right hh <- getConHead (conName h)
           TelV tel a <- telView a
           let under = size tel  -- under-applied when under > 0
           reportSDoc "tc.with.reconstruct" 50 $
@@ -82,10 +84,10 @@ reconstructParameters' act a v = do
               let hiddenPs = map (Apply . hideAndRelParams) $ fromMaybe __IMPOSSIBLE__ $
                                allApplyElims prePs
               reportSDoc "tc.with.reconstruct" 50 $ "The hiddenPs are" <+> pretty hiddenPs
-              tyCon <- defType <$> getConstInfo (conName h)
+              tyCon <- defType <$> getConstInfo (conName hh)
               reportSDoc "tc.reconstruct" 30 $ "Here we start infering spine"
-              ((_,Con h ci psAfterAct),_) <- inferSpine' act tyCon (Con h ci []) (Con h ci []) hiddenPs
-              ((_,conWithPars),_) <- inferSpine' reconstructAction tyCon (Con h ci []) (Con h ci []) psAfterAct
+              ((_,Con hh ci psAfterAct),_) <- inferSpine' act tyCon (Con hh ci []) (Con hh ci []) hiddenPs
+              ((_,conWithPars),_) <- inferSpine' reconstructAction tyCon (Con hh ci []) (Con hh ci []) psAfterAct
               reportSDoc "tc.reconstruct" 30 $ "The spine has been inferred:" <+> pretty conWithPars
               return $ applyWithoutReversing conWithPars vs
             _ -> __IMPOSSIBLE__
