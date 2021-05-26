@@ -13,6 +13,7 @@ module Agda.TypeChecking.Coverage
   , splitLast
   , splitResult
   , normaliseProjP
+  , getFunCovering
   ) where
 
 import Prelude hiding (null, (!!))  -- do not use partial functions like !!
@@ -127,6 +128,56 @@ clauseToSplitClause cl = SClause
   }
 
 type CoverM = ExceptT SplitError TCM
+
+
+getFunCovering
+  :: QName     -- ^ Name @f@ of definition.
+  -> Type      -- ^ Absolute type (including the full parameter telescope).
+  -> [Clause]  -- ^ Clauses of @f@.  These are the very clauses of @f@ in the signature.
+  -> TCM [Clause]
+getFunCovering f t cs = do
+  reportSLn "tc.cover.top" 30 $ "entering coverageCheck for " ++ prettyShow f
+  reportSDoc "tc.cover.top" 75 $ "  of type (raw): " <+> (text . prettyShow) t
+  reportSDoc "tc.cover.top" 45 $ "  of type: " <+> prettyTCM t
+  TelV gamma a <- telViewUpTo (-1) t
+  reportSLn "tc.cover.top" 30 $ "coverageCheck: computed telView"
+
+  let -- n             = arity
+      -- xs            = variable patterns fitting lgamma
+      n            = size gamma
+      xs           =  map (setOrigin Inserted) $ teleNamedArgs gamma
+
+  reportSLn "tc.cover.top" 30 $ "coverageCheck: getDefFreeVars"
+
+      -- The initial module parameter substitutions need to be weakened by the
+      -- number of arguments that aren't module parameters.
+  fv           <- getDefFreeVars f
+
+  reportSLn "tc.cover.top" 30 $ "coverageCheck: getting checkpoints"
+
+  -- TODO: does this make sense? Why are we weakening by n - fv?
+  checkpoints <- applySubst (raiseS (n - fv)) <$> viewTC eCheckpoints
+
+      -- construct the initial split clause
+  let sc = SClause gamma xs idS checkpoints $ Just $ defaultDom a
+
+  reportSDoc "tc.cover.top" 10 $ do
+    let prCl cl = addContext (clauseTel cl) $
+                  prettyTCMPatternList $ namedClausePats cl
+    vcat
+      [ text $ "Coverage checking " ++ prettyShow f ++ " with patterns:"
+      , nest 2 $ vcat $ map prCl cs
+      ]
+
+  -- used = actually used clauses for cover
+  -- pss  = non-covered cases
+  CoverResult splitTree used pss qss noex <- cover f cs sc
+
+  return qss
+
+
+
+
 
 -- | Top-level function for checking pattern coverage.
 --
